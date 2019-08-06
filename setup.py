@@ -1,4 +1,3 @@
-    
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -38,7 +37,7 @@ def get_packages(package):
 setup(
     name="shared_lib",
     version=get_version("orm"),
-    python_requires='>=3.6',
+    python_requires=">=3.6",
     license="BSD",
     description="Async database support for Python.",
     long_description=get_long_description(),
@@ -48,11 +47,18 @@ setup(
     packages=get_packages("orm"),
     # package_data={"databases": ["py.typed"]},
     # data_files=[("", ["LICENSE.md"])],
-    install_requires=["sqlalchemy", 'pydantic[email]','databases','alembic','cached_property'],
+    install_requires=[
+        "sqlalchemy",
+        "pydantic[email]",
+        "databases",
+        "alembic",
+        "cached_property",
+        "aioredis",
+    ],
     extras_require={
         "postgresql": ["asyncpg", "psycopg2-binary"],
         "mysql": ["aiomysql", "pymysql"],
-        "sqlite": ["aiosqlite"]
+        "sqlite": ["aiosqlite"],
     },
     classifiers=[
         "Development Status :: 3 - Alpha",
