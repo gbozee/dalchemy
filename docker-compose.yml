@@ -1,0 +1,42 @@
+version: "3.1"
+
+volumes:
+  postgres_data_dev: {}
+  postgres_backup_dev: {}
+  admin_postgres_data_dev: {}
+  admin_postgres_backup_dev: {}
+  staticfiles: {}
+  lets_encrypt_dev: {}
+
+services:
+  postgres:
+    image: sameersbn/postgresql:10-2
+    # image: sameersbn/postgresql:9.6-2
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - postgres_backup_dev:/backups
+    restart: always
+    environment:
+      DB_USER: e_bots
+      DB_PASS: e_bots1991
+      DB_NAME: e_bots
+      REPLICATION_USER: e_bots1
+      REPLICATION_PASS: password
+      PG_PASSWORD: password
+    ports:
+      - "5434:5432"
+
+  replication:
+    environment:
+      REPLICATION_USER: e_bots1
+      REPLICATION_PASS: password
+      REPLICATION_MODE: slave
+      REPLICATION_SSLMODE: prefer
+      REPLICATION_HOST: master
+      REPLICATION_PORT: 5432
+    image: sameersbn/postgresql:10-2
+    # image: sameersbn/postgresql:9.6-2
+    ports:
+      - 0.0.0.0:5433:5432
+    links:
+      - postgres:master

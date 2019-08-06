@@ -48,7 +48,7 @@ setup(
     packages=get_packages("orm"),
     # package_data={"databases": ["py.typed"]},
     # data_files=[("", ["LICENSE.md"])],
-    install_requires=["sqlalchemy", 'pydantic[email]','databases','alembic'],
+    install_requires=["sqlalchemy", 'pydantic[email]','databases','alembic','cached_property'],
     extras_require={
         "postgresql": ["asyncpg", "psycopg2-binary"],
         "mysql": ["aiomysql", "pymysql"],
