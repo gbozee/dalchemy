@@ -1,0 +1,2 @@
+class CacheDuplicateError(Exception):
+    pass

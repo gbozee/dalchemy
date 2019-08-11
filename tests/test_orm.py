@@ -6,7 +6,7 @@ import models
 from orm.utils import async_adapter
 
 
-@async_adapter
+@pytest.mark.run_loop
 async def test_model_create():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
@@ -42,7 +42,7 @@ async def test_model_create():
         assert await models.User.objects.count() == 0
 
 
-@async_adapter
+@pytest.mark.run_loop
 async def test_foreign_key_relationship():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
@@ -73,7 +73,7 @@ async def test_foreign_key_relationship():
         await models.PhoneNumber.objects.delete()
 
 
-@async_adapter
+@pytest.mark.run_loop
 async def test_json_field_query():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
@@ -116,7 +116,7 @@ async def test_json_field_query():
         await models.Profile.objects.delete()
 
 
-@async_adapter
+@pytest.mark.run_loop
 async def test_different_db_usage(replica_database):
     db = models.User.database
     async with db:  # using default database

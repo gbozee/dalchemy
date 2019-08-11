@@ -1,4 +1,4 @@
-from orm import Base, fields
+from orm import Base, fields, CacheBase
 from pydantic import EmailStr, SecretStr, validator
 import typing
 
@@ -11,12 +11,22 @@ class User(Base):
 
     class Config:
         table_name = "users"
+        cache_field = "email"
         table_config = {
             "id": {"primary_key": True, "index": True},
             "full_name": {"index": True},
             "email": {"unique": True},
             "is_active": {"default": True},
         }
+
+
+class Skill(Base):
+    name: str
+
+    class Config:
+        table_name = "skills"
+        cache_field = "name"
+        table_config = {"id": {"primary_key": True}}
 
 
 class PhoneNumber(Base):
@@ -40,13 +50,35 @@ class Profile(Base):
         table_name = "profiles"
         table_config = {
             "id": {"primary_key": True},
-            "user": {
-                "name": "user_id",
-                "type": int,
-            },
+            "user": {"name": "user_id", "type": int},
             "addresses": {"jsonb": True},
         }
 
     @validator("addresses", pre=True, always=True)
     def set_addresses(cls, v):
         return v or []
+
+
+class UserInfo(CacheBase):
+    full_name: str
+    email: EmailStr
+    is_active: bool = True
+    addresses: typing.List[dict] = []
+    numbers: typing.List[str] = []
+
+    class Config:
+        cache_key = "user_info"
+        cache_field = "email"
+
+    @classmethod
+    async def get_data(cls, key):
+        profile = await Profile.objects.filter(user__email=key).get()
+        phone_numbers = await PhoneNumber.objects.filter(user__email=key).all()
+        user = profile.user
+        return dict(
+            full_name=user.full_name,
+            email=user.email,
+            is_active=user.is_active,
+            addresses=profile.addresses,
+            numbers=[x.number for x in phone_numbers],
+        )

@@ -1,4 +1,6 @@
+import asyncio
 import typing
+from asyncio.tasks import ensure_future
 from dataclasses import dataclass
 
 import databases
@@ -8,9 +10,9 @@ from cached_property import cached_property
 from pydantic import BaseModel, EmailStr, SecretStr
 from pydantic.main import MetaModel
 
-from .queryset import QuerySet
-from .utils import get_field
 from . import fields
+from .queryset import QuerySet, CacheQuerySet
+from .utils import get_field
 
 
 @dataclass
@@ -131,7 +133,11 @@ class Base(BaseModel, metaclass=ModelMetaClass):
                 columns.append(create_db_column(value, **attr))
         return sqlalchemy.Table(table_name, metadata, *columns, extend_existing=True)
 
-    async def save(self, using="default"):
+    async def quick_save(self):
+        if hasattr(self.__class__, "redis_conn"):
+            redis_conn = await self.__class__.redis_conn()
+
+    async def save(self, using="default", connection=None):
         table = self.objects.table
         values = self.dict()
         clean_values = {}
@@ -139,7 +145,10 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             if self._is_related_field(key):
                 clean_values[self._get_field_db_name(key)] = value["id"]
             else:
-                clean_values[key] = value
+                if type(value) == SecretStr:
+                    clean_values[key] = value.display()
+                else:
+                    clean_values[key] = value
         if not self.id:
             sql = table.insert()
             clean_values.pop("id")
@@ -148,8 +157,13 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         sql = sql.values(**clean_values)
         if self.id:
             sql = sql.where(table.c.id == self.id)
-        result = await self.databases[using].execute(query=sql)
+        # task = asyncio.create_task()
+        result, _ = await asyncio.gather(
+            self.databases[using].execute(query=sql),
+            self.objects.remove_cache(self, connection=connection),
+        )
         self.id = result
+        # return task
 
     async def load(self):
         table = self.objects.table
@@ -161,10 +175,13 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         cls,
         database: typing.Dict[str, databases.Database],
         metadata: sqlalchemy.MetaData,
+        redis_instance=None,
     ):
         cls.databases = database
         cls.metadata = metadata
         cls.database = database.get("default")
+        if redis_instance:
+            cls.redis_conn = redis_instance
 
     def __eq__(self, value):
         return self.id == value.id
@@ -180,3 +197,33 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             else:
                 result[name] = value
         return result
+
+    async def in_write_cache(self, connection=None) -> bool:
+        return await self.objects.in_write_cache(self, connection=connection)
+
+
+class CacheMetaClass(MetaModel):
+    def __init__(self, name, bases, namespace, **kwargs):
+        # This will never be called because the return type of `__new__` is wrong
+        super().__init__(name, bases, namespace, **kwargs)
+        self.objects = CacheQuerySet(self)
+
+
+class CacheBase(BaseModel, metaclass=CacheMetaClass):
+    from_db: bool = True
+
+    @classmethod
+    def model_fields(cls):
+        return cls.__dict__["__fields__"]
+
+    @property
+    def cache_id(self):
+        table = self.__class__.Config.cache_key
+        field = self.__class__.Config.cache_field
+        return f"{table}:{getattr(self, field)}"
+
+    async def update_cache(self, connection):
+        await self.objects.save_to_cache(self, connection)
+
+    def items(self):
+        return self.dict().items()

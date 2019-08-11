@@ -4,7 +4,7 @@ import functools
 import sqlalchemy
 
 
-def init_tables(model: type, database, replica_database=None):
+def init_tables(model: type, database, replica_database=None, redis_instance=None):
     tables = []
     metadata = sqlalchemy.MetaData()
     for subclass in model.__subclasses__():
@@ -14,6 +14,7 @@ def init_tables(model: type, database, replica_database=None):
         subclass.init_db_params(
             {"default": database, "replica": replica_database},
             metadata,
+            redis_instance=redis_instance
             # database, metadata, other_db={"replica": replica_database}
         )
     return metadata

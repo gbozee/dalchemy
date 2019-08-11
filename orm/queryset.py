@@ -1,11 +1,14 @@
 import typing
 from dataclasses import dataclass
-
+import json
+import asyncio
+import aioredis
 import databases
 import sqlalchemy
 from cached_property import cached_property
+
+from . import utils, exceptions
 from .fields import CustomField
-from . import utils
 
 
 @dataclass
@@ -36,7 +39,88 @@ JSON_OPERATORS = {
 }
 
 
-class QuerySet:
+class QuerySetMixin:
+    def dict_to_redis_dict(self, dictionary: dict, exclude: typing.List[str] = None):
+        result = {}
+        for key, value in dictionary.items():
+            if type(value) == bool:
+                result[key] = int(value)
+            elif type(value) == list:
+                result[key] = json.dumps(value)
+            else:
+                if exclude:
+                    if key not in exclude:
+                        result[key] = value
+                else:
+                    result[key] = value
+        return result
+
+    def obj_to_redis_dict(self, obj, class_fields, exclude=None):
+        result = {}
+        for key, value in class_fields.items():
+            if value.type_ == bool:
+                result[key] = int(getattr(obj, key))
+            else:
+                if exclude:
+                    if key not in exclude:
+                        result[key] = getattr(obj, key)
+                else:
+                    result[key] = getattr(obj, key)
+        return result
+
+    def redis_dict_to_obj(self, as_dict: dict, class_fields, klass):
+        actual_dict = {}
+        for key, value in class_fields.items():
+            if key != "id":
+                if value.type_ == bool:
+                    actual_dict[key] = bool(as_dict[key])
+                elif (value.type_ in [dict, list] or value.default == []) and type(
+                    as_dict[key]
+                ) == str:
+                    actual_dict[key] = json.loads(as_dict[key])
+                else:
+                    actual_dict[key] = as_dict[key]
+        return klass(**actual_dict)
+
+
+class CacheQuerySet(QuerySetMixin):
+    def __init__(self, klass):
+        self.klass = klass
+
+    def cache_key(self, obj: typing.Union[typing.Any, str]):
+        config = self.klass.Config
+        if type(obj) == str:
+            return f"{config.cache_key}:{obj}"
+        if hasattr(config, "cache_field"):
+            if type(obj) == dict:
+                value = obj.get("email")
+            else:
+                value = getattr(obj, config.cache_field)
+            return f"{config.cache_key}:{value}"
+        raise AssertionError("Cache field not added to the Config class on the model.")
+
+    async def save_to_cache(self, result, connection):
+        _cache_key = self.cache_key(result)
+        as_dict = self.dict_to_redis_dict(result)
+        await connection.hmset_dict(_cache_key, as_dict)
+
+    async def get(self, cache_key: str, connection=None):
+        if connection:
+            _cache_key = self.cache_key(cache_key)
+            result = await connection.hgetall(_cache_key)
+            from_db = False
+            if not result:
+                result = await self.klass.get_data(cache_key)
+                await self.save_to_cache(result, connection)
+                from_db = True
+            result["from_db"] = from_db
+            instance = self.redis_dict_to_obj(
+                result, self.klass.model_fields(), self.klass
+            )
+            return instance
+
+
+class QuerySet(QuerySetMixin):
     ESCAPE_CHARACTERS = ["%", "_"]
 
     def __init__(self, klass, pk="id"):
@@ -293,3 +377,65 @@ class QuerySet:
     def using(self, key):
         self._using = key
         return self
+
+    def cache_key(self, obj: typing.Union[typing.Any, str]):
+        config = self.klass.Config
+        if type(obj) == str:
+            return f"{config.table_name}:{obj}"
+        if hasattr(config, "cache_field"):
+            value = getattr(obj, config.cache_field)
+            return f"{config.table_name}:{value}"
+        raise AssertionError("Cache field not added to the Config class on the model.")
+
+    # CACHE Queryset methods
+    async def quick_create(self, connection, **kwargs):
+        instance = self.klass(**kwargs)
+        as_dict = self.obj_to_redis_dict(instance)
+        # remove demo_id
+        as_dict.pop("id", None)
+        key = self.cache_key(instance)
+        in_cache = await connection.exists(key)
+        if in_cache:
+            raise exceptions.CacheDuplicateError(f"Item with {key} previously saved")
+        await connection.hmset_dict(key, as_dict)
+        return key
+
+    async def cache_get(self, cache_field: str, connection=None):
+        key = self.cache_key(cache_field)
+
+        if connection:
+            record = await connection.hgetall(key)
+            if record:
+                obj = self.redis_dict_to_obj(record)
+                return obj
+
+    async def in_write_cache(self, obj, connection=None) -> bool:
+        key = self.cache_key(obj)
+        result = await connection.exists(key)
+        return bool(result)
+
+    async def remove_cache(self, obj, connection=None):
+        if connection:
+            exists = await self.in_write_cache(obj, connection=connection)
+            key = self.cache_key(obj)
+            if exists:
+                await connection.delete(key)
+
+    async def cache_all(self, connection=None):
+        if connection:
+            prefix = self.klass.Config.table_name
+            keys = await connection.keys(f"*{prefix}:*")
+            if keys:
+                pipe = connection.pipeline()
+                tasks = [pipe.hgetall(x) for x in keys]
+                result = await pipe.execute()
+                data = await asyncio.gather(*tasks)
+                return [self.redis_dict_to_obj(x) for x in data]
+            return []
+        raise AssertionError("aioredis connection not passed")
+
+    def obj_to_redis_dict(self, obj):
+        return super().obj_to_redis_dict(obj, self.klass.model_fields())
+
+    def redis_dict_to_obj(self, as_dict: dict):
+        return super().redis_dict_to_obj(as_dict, self.klass.model_fields(), self.klass)
