@@ -142,6 +142,7 @@ class QuerySet(QuerySetMixin):
         return self.klass.build_table(self.metadata)
 
     async def bulk_create_or_insert(self, records):
+        assert len(records) > 0
         sql = self.table.insert()
         values = [x.db_dict() for x in records]
         if values[0]["id"] != 0:
@@ -313,8 +314,9 @@ class QuerySet(QuerySetMixin):
         _dict = await self.as_dict(sqlalchemy_result)
         return self.klass(**_dict)
 
-    async def all(self):
-        result = await self.database.fetch_all(self.get_queryset())
+    async def all(self, where_clause=None, custom=False):
+        queryset = where_clause if custom else self.get_queryset()
+        result = await self.database.fetch_all(queryset)
         self.queryset = None
         return await asyncio.gather(*[self.as_klass(o) for o in result])
 

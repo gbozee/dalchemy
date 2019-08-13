@@ -35,7 +35,7 @@ def get_packages(package):
 
 
 setup(
-    name="shared_lib",
+    name="dalchemy",
     version=get_version("orm"),
     python_requires=">=3.6",
     license="BSD",
@@ -54,12 +54,10 @@ setup(
         "alembic",
         "cached_property",
         "aioredis",
+        "asyncpg",
+        "psycopg2-binary",
     ],
-    extras_require={
-        "postgresql": ["asyncpg", "psycopg2-binary"],
-        "mysql": ["aiomysql", "pymysql"],
-        "sqlite": ["aiosqlite"],
-    },
+    extras_require={},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Web Environment",

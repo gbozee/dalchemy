@@ -10,7 +10,7 @@ from cached_property import cached_property
 from pydantic import BaseModel, EmailStr, SecretStr
 from pydantic.main import MetaModel
 
-from . import fields
+from . import fields, queryset
 from .queryset import QuerySet, CacheQuerySet
 from .utils import get_field
 
@@ -67,10 +67,10 @@ class ModelMetaClass(MetaModel):
     def __init__(self, name, bases, namespace, **kwargs):
         # This will never be called because the return type of `__new__` is wrong
         super().__init__(name, bases, namespace, **kwargs)
-        self.objects = QuerySet(self)
+        self.objects = queryset.QuerySet(self)
 
     @property
-    def table(self):
+    def table(self) -> sqlalchemy.Table:
         return self.objects.table
 
     @property
@@ -193,7 +193,10 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             value = getattr(self, key)
             name = self._get_field_db_name(key)
             if self._is_related_field(key):
-                result[name] = value.id
+                if value:
+                    result[name] = value.id
+                else:
+                    result[name] = None
             else:
                 result[name] = value
         return result
