@@ -82,3 +82,17 @@ class UserInfo(CacheBase):
             addresses=profile.addresses,
             numbers=[x.number for x in phone_numbers],
         )
+
+
+class ProfileCache(CacheBase):
+    email: EmailStr
+    user: User
+
+    class Config:
+        cache_key = "profile_info"
+        cache_field = "email"
+
+    @classmethod
+    async def get_data(cls, key):
+        user = await User.objects.filter(email=key).get()
+        return dict(email=user.email, user=user)

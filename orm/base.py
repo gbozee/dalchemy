@@ -117,6 +117,21 @@ class Base(BaseModel, metaclass=ModelMetaClass):
                 break
         return result
 
+    @classmethod
+    def validate_model(cls, **kwargs):
+        try:
+            instance = cls(**kwargs)
+        except pydantic.ValidationError as e:
+            result = {}
+            for value in e.errors():
+                field = value["loc"][0]
+                existing_value = result.get(field) or []
+                existing_value.append(value["type"])
+                result[field] = existing_value
+            return result
+        else:
+            return None
+
     def _get_field_db_name(self, field: str) -> str:
         if self._is_related_field(field):
             return self.__class__.Config.table_config.get(field).get("name")
@@ -146,7 +161,7 @@ class Base(BaseModel, metaclass=ModelMetaClass):
                 clean_values[self._get_field_db_name(key)] = value["id"]
             else:
                 if type(value) == SecretStr:
-                    clean_values[key] = value.display()
+                    clean_values[key] = value.get_secret_value()
                 else:
                     clean_values[key] = value
         if not self.id:
@@ -169,6 +184,15 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         table = self.objects.table
         record = await self.objects.filter(id=self.id).get()
         self = record
+
+    def as_dict(self):
+        result = {}
+        for key, value in self.dict().items():
+            if type(value) == SecretStr:
+                result[key] = value.get_secret_value()
+            else:
+                result[key] = value
+        return result
 
     @classmethod
     def init_db_params(
@@ -227,6 +251,8 @@ class CacheBase(BaseModel, metaclass=CacheMetaClass):
 
     async def update_cache(self, connection):
         await self.objects.save_to_cache(self, connection)
+        
 
     def items(self):
         return self.dict().items()
+

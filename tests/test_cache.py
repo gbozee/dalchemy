@@ -98,3 +98,32 @@ async def test_cache_model(create_redis):
         record = await models.UserInfo.objects.get("j@o.com", connection=conn)
         assert record.full_name == "J2o@example.com"
 
+
+# add test scenario when field is an object instead of a primitive.
+@pytest.mark.run_loop
+async def test_cache_model_with_non_primitive(create_redis):
+    conn = await create_redis()
+    await conn.delete("user_info:j@o.com")
+    await conn.delete("email:j@o.com")
+    await conn.delete("profile_info:j@o.com")
+    db = models.User.database
+    async with db:  # using default database
+        await create_test_data()
+        record = await models.ProfileCache.objects.get("j@o.com", connection=conn)
+        assert record.email == "j@o.com"
+        assert record.user.full_name == "Jones@example.com"
+        assert record.user.is_active
+        assert record.cache_id == "profile_info:j@o.com"
+        assert record.from_db
+        record = await models.ProfileCache.objects.get("j@o.com", connection=conn)
+        assert not record.from_db
+        # update cache
+        record.user.full_name = "J2o@example.com"
+        await record.update_cache(conn)
+        record = await models.ProfileCache.objects.get("j@o.com", connection=conn)
+        assert record.user.full_name == "J2o@example.com"
+        assert not record.from_db
+
+        await models.User.objects.delete()
+        await models.Profile.objects.delete()
+        await models.PhoneNumber.objects.delete()

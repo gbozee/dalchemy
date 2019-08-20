@@ -6,7 +6,7 @@ import aioredis
 import databases
 import sqlalchemy
 from cached_property import cached_property
-
+from pydantic import SecretStr
 from . import utils, exceptions
 from .fields import CustomField
 
@@ -39,14 +39,52 @@ JSON_OPERATORS = {
 }
 
 
+def to_redis_dict(dictionary: dict, exclude: typing.List[str] = None):
+    result = {}
+    for key, value in dictionary.items():
+        if type(value) == bool:
+            result[key] = int(value)
+        elif type(value) in [list, dict]:
+            result[key] = json.dumps(value)
+        elif type(value) == SecretStr:
+            result[key] = value.get_secret_value()
+        else:
+            if exclude:
+                if key not in exclude:
+                    result[key] = value
+            else:
+                result[key] = value
+    return result
+
+
+def to_python_dict(redis_dict: dict, class_fields: dict):
+    actual_dict = {}
+    for key, value in class_fields.items():
+        if value.type_ == bool:
+            actual_dict[key] = bool(redis_dict[key])
+        elif (value.type_ in [dict, list] or value.default == []) and type(
+            redis_dict[key]
+        ) == str:
+            actual_dict[key] = json.loads(redis_dict[key])
+        else:
+            actual_dict[key] = redis_dict[key]
+    return actual_dict
+
+
 class QuerySetMixin:
     def dict_to_redis_dict(self, dictionary: dict, exclude: typing.List[str] = None):
+        from orm.base import Base
+
         result = {}
         for key, value in dictionary.items():
             if type(value) == bool:
                 result[key] = int(value)
             elif type(value) == list:
                 result[key] = json.dumps(value)
+            elif type(value) == dict:
+                result[key] = json.dumps(to_redis_dict(value))
+            elif isinstance(value, Base):
+                result[key] = json.dumps(to_redis_dict(value.as_dict()))
             else:
                 if exclude:
                     if key not in exclude:
@@ -70,6 +108,8 @@ class QuerySetMixin:
 
     def redis_dict_to_obj(self, as_dict: dict, class_fields, klass):
         actual_dict = {}
+        from orm.base import Base
+
         for key, value in class_fields.items():
             if key != "id":
                 if value.type_ == bool:
@@ -78,9 +118,18 @@ class QuerySetMixin:
                     as_dict[key]
                 ) == str:
                     actual_dict[key] = json.loads(as_dict[key])
+                elif issubclass(value.type_, Base):
+                    actual_dict[key] = self.marshal_to_class(value.type_, as_dict[key])
                 else:
                     actual_dict[key] = as_dict[key]
         return klass(**actual_dict)
+
+    def marshal_to_class(self, klass, redis_dictionary):
+        if isinstance(redis_dictionary, klass):
+            return redis_dictionary
+        to_dict = json.loads(redis_dictionary)
+        klass_dict = to_python_dict(to_dict, klass.model_fields())
+        return klass(**klass_dict)
 
 
 class CacheQuerySet(QuerySetMixin):

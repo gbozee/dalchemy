@@ -105,3 +105,4 @@ venv.bak/
 *.db
 startup.sh 
 .vscode
+client_secret.json
