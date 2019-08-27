@@ -1,1 +1,35 @@
-site_name: My Docs
+site_name: DAlchemy
+
+theme:
+    name: 'material'
+    palette:
+      primary: 'black'
+      accent: 'blue'
+# Customization
+extra:
+  social:
+    - type: globe
+      link: http://struct.cc
+    - type: github-alt
+      link: https://github.com/squidfunk
+    - type: twitter
+      link: https://twitter.com/squidfunk
+    - type: slack
+      link: https://linkedin.com/in/squidfunk
+markdown_extensions:
+  - codehilite
+  - admonition
+  - toc:
+      permalink: true
+
+# Page tree
+nav:
+  - Home: index.md
+  - API Reference: api-reference.md
+  - Testing: tests.md
+  # - Customization: customization.md
+  # - Compliance with GDPR: compliance.md
+  # - Release notes: release-notes.md
+  # - Author's notes: authors-notes.md
+  # - Contributing: contributing.md
+  # - License: license.md

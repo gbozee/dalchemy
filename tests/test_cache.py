@@ -32,6 +32,7 @@ async def test_record_create(create_redis):
         # item no longer in cache.
         record = await models.User.objects.cache_get("j@o.com")
         assert not record
+        # fetch from db and add to cache
         await models.User.objects.delete()
 
 

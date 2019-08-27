@@ -9,6 +9,9 @@ from cached_property import cached_property
 from pydantic import SecretStr
 from . import utils, exceptions
 from .fields import CustomField
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -62,7 +65,7 @@ def to_python_dict(redis_dict: dict, class_fields: dict):
     for key, value in class_fields.items():
         if value.type_ == bool:
             actual_dict[key] = bool(redis_dict[key])
-        elif (value.type_ in [dict, list] or value.default == []) and type(
+        elif (value.type_ in [dict, list] or value.default in [[], {}]) and type(
             redis_dict[key]
         ) == str:
             actual_dict[key] = json.loads(redis_dict[key])
@@ -122,7 +125,8 @@ class QuerySetMixin:
                     actual_dict[key] = self.marshal_to_class(value.type_, as_dict[key])
                 else:
                     actual_dict[key] = as_dict[key]
-        return klass(**actual_dict)
+        result = klass(**actual_dict)
+        return result
 
     def marshal_to_class(self, klass, redis_dictionary):
         if isinstance(redis_dictionary, klass):
@@ -451,11 +455,14 @@ class QuerySet(QuerySetMixin):
         await connection.hmset_dict(key, as_dict)
         return key
 
-    async def cache_get(self, cache_field: str, connection=None):
+    async def cache_get(self, cache_field: str, connection=None, auto_close=False):
         key = self.cache_key(cache_field)
 
         if connection:
             record = await connection.hgetall(key)
+            if auto_close:
+                connection.close()
+                await connection.wait_closed()
             if record:
                 obj = self.redis_dict_to_obj(record)
                 return obj
