@@ -43,6 +43,37 @@ async def test_model_create():
 
 
 @pytest.mark.run_loop
+async def test_foreign_key_relationship_creation_with_id():
+    user = models.User(full_name="Abiola", email="j@o.com")
+    async with user.database:
+        await user.save()
+        user_number = await models.PhoneNumber.objects.create(
+            user_id=user.id, number="+2348033223323"
+        )
+        assert user_number.user.id == user.id
+        assert user_number.number == "+2348033223323"
+        assert user_number.user.full_name == "Abiola"
+        # fetch from db
+        record = await models.PhoneNumber.objects.first()
+        assert record.user.id == user.id
+        assert record.number == "+2348033223323"
+        assert record.user.full_name == "Abiola"
+        # fetch with related data
+        record = await models.PhoneNumber.objects.last()
+        assert record.user.full_name == "Abiola"
+        # test with filter
+        table = models.PhoneNumber.table
+        sql = table.select()
+        record = await models.PhoneNumber.objects.filter(
+            **{"user__full_name": "Abiola"}
+        ).get()
+        assert record.user.full_name == "Abiola"
+        assert record.number == "+2348033223323"
+        await models.User.objects.delete()
+        await models.PhoneNumber.objects.delete()
+
+
+@pytest.mark.run_loop
 async def test_foreign_key_relationship():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
@@ -71,6 +102,24 @@ async def test_foreign_key_relationship():
         assert record.number == "+2348033223323"
         await models.User.objects.delete()
         await models.PhoneNumber.objects.delete()
+
+
+@pytest.mark.run_loop
+async def test_bulk_json_field_insert():
+    user = models.User(full_name="Abiola", email="j@o.com")
+    async with user.database:
+        await user.save()
+        await models.Profile.objects.bulk_create_or_insert(
+            [
+                dict(user_id=user.id, addresses={"name": "Eleja 2"}),
+                dict(user_id=user.id, addresses={"name": "Sunday 2"}),
+                dict(user_id=user.id, addresses={"name": "Sunday"}),
+            ],
+            is_model=False,
+        )
+        profile = await models.Profile.objects.first()
+        assert profile.addresses == {"name": "Eleja 2"}
+        assert profile.user == user
 
 
 @pytest.mark.run_loop

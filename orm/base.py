@@ -27,6 +27,9 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
     column = None
     if field_type == int:
         column = sqlalchemy.Integer
+    elif field_type == float:
+        column = sqlalchemy.Float
+
     elif field_type in [str, EmailStr, SecretStr]:
         length = kwargs.pop("length", None)
         column = sqlalchemy.String
@@ -95,7 +98,7 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         return fields.is_related_field(type_class)
 
     @classmethod
-    def model_fields(cls):
+    def model_fields(cls) -> dict:
         return cls.__dict__["__fields__"]
 
     @classmethod
@@ -106,7 +109,28 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         return cls
 
     @classmethod
-    def get_class_field_from_db_name(cls, db_name: str):
+    async def transform_kwargs(cls, **kwargs):
+        """If a foreign key `id` field is passed instead of the foreign key field,
+        the info is fetched and the foreign key field is used
+        """
+        model_fields = cls.model_fields().keys()
+        non_model_fields = set(kwargs.keys()).difference(set(model_fields))
+        if non_model_fields:
+            # check if any of the field is a related field instead
+            for key in non_model_fields:
+                id_value = kwargs.pop(key)
+                result = cls.get_class_field_from_db_name(key)
+                if result:
+                    new_key = result[0]
+                    new_key_class = cls.get_related_field_class(new_key)
+                    instance = await new_key_class.objects.get(id=id_value)
+                    kwargs[new_key] = instance
+        return kwargs
+
+    @classmethod
+    def get_class_field_from_db_name(
+        cls, db_name: str
+    ) -> typing.Tuple[str, typing.Any]:
         fields = cls.model_fields()
         if db_name in list(fields.keys()):
             return db_name, fields[db_name].type_
@@ -132,10 +156,14 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         else:
             return None
 
-    def _get_field_db_name(self, field: str) -> str:
-        if self._is_related_field(field):
-            return self.__class__.Config.table_config.get(field).get("name")
+    @classmethod
+    def get_field_db_name(cls, field: str):
+        if cls.is_related_field(field):
+            return cls.Config.table_config.get(field).get("name")
         return field
+
+    def _get_field_db_name(self, field: str) -> str:
+        return self.__class__.get_field_db_name(field)
 
     @classmethod
     def build_table(cls, metadata: sqlalchemy.MetaData) -> sqlalchemy.Table:
@@ -152,30 +180,51 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         if hasattr(self.__class__, "redis_conn"):
             redis_conn = await self.__class__.redis_conn()
 
-    async def save(self, using="default", connection=None):
-        table = self.objects.table
+    async def delete(self):
+        await self.objects.filter(id=self.id).delete()
+        return None
+
+    def build_db_save_params(self):
         values = self.dict()
         clean_values = {}
         for key, value in values.items():
             if self._is_related_field(key):
-                clean_values[self._get_field_db_name(key)] = value["id"]
+                if value:
+                    clean_values[self._get_field_db_name(key)] = value["id"]
             else:
                 if type(value) == SecretStr:
                     clean_values[key] = value.get_secret_value()
                 else:
                     clean_values[key] = value
-        if not self.id:
+        return clean_values
+
+    @classmethod
+    async def save_model(cls, clean_values, _id=0, using="default", connection=None):
+        table = cls.table
+        obj = None
+        if _id:
+            # create class instance when no id exists
+            obj = cls(**clean_values)
+        if not _id:
             sql = table.insert()
             clean_values.pop("id")
         else:
             sql = table.update()
         sql = sql.values(**clean_values)
-        if self.id:
-            sql = sql.where(table.c.id == self.id)
+        if _id:
+            sql = sql.where(table.c.id == _id)
         # task = asyncio.create_task()
-        result, _ = await asyncio.gather(
-            self.databases[using].execute(query=sql),
-            self.objects.remove_cache(self, connection=connection),
+        tasks = [cls.databases[using].execute(query=sql)]
+        if obj:
+            tasks.append(cls.objects.remove_cache(obj, connection=connection))
+
+        result = await asyncio.gather(*tasks)
+        return result[0]
+
+    async def save(self, using="default", connection=None):
+        clean_values = self.build_db_save_params()
+        result = await self.__class__.save_model(
+            clean_values, _id=self.id, using=using, connection=connection
         )
         self.id = result
         # return task
@@ -210,20 +259,47 @@ class Base(BaseModel, metaclass=ModelMetaClass):
     def __eq__(self, value):
         return self.id == value.id
 
-    def db_dict(self):
-        fields = self.__class__.model_fields()
+    @classmethod
+    def build_db_dict(cls, instance):
+        fields = cls.model_fields()
         result = {}
+        non_model_fields = {}
+        if isinstance(instance, dict):
+            non_model_fields = set(instance.keys()).difference(fields.keys())
         for key in fields.keys():
-            value = getattr(self, key)
-            name = self._get_field_db_name(key)
-            if self._is_related_field(key):
+            if isinstance(instance, dict):
+                value = instance.get(key)
+            else:
+                value = getattr(instance, key)
+            name = cls.get_field_db_name(key)
+            if cls.is_related_field(key):
                 if value:
                     result[name] = value.id
                 else:
+
                     result[name] = None
             else:
                 result[name] = value
+        # add the remaining non model fields to the db
+        for j in non_model_fields:
+            result[j] = instance.get(j)
         return result
+
+    def db_dict(self):
+        fields = self.__class__.model_fields()
+        return self.__class__.build_db_dict(self)
+        # result = {}
+        # for key in fields.keys():
+        #     value = getattr(self, key)
+        #     name = self._get_field_db_name(key)
+        #     if self._is_related_field(key):
+        #         if value:
+        #             result[name] = value.id
+        #         else:
+        #             result[name] = None
+        #     else:
+        #         result[name] = value
+        # return result
 
     async def in_write_cache(self, connection=None) -> bool:
         return await self.objects.in_write_cache(self, connection=connection)
@@ -251,7 +327,6 @@ class CacheBase(BaseModel, metaclass=CacheMetaClass):
 
     async def update_cache(self, connection):
         await self.objects.save_to_cache(self, connection)
-        
 
     def items(self):
         return self.dict().items()

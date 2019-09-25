@@ -194,15 +194,19 @@ class QuerySet(QuerySetMixin):
     def table(self):
         return self.klass.build_table(self.metadata)
 
-    async def bulk_create_or_insert(self, records):
+    async def bulk_create_or_insert(self, records, is_model=True):
         assert len(records) > 0
         sql = self.table.insert()
-        values = [x.db_dict() for x in records]
-        if values[0]["id"] != 0:
+        if is_model:
+            values = [x.db_dict() for x in records]
+        else:
+            values = [self.klass.build_db_dict(x) for x in records]
+        if values[0].get("id"):
             sql = self.table.update()
         for i in values:
-            if i["id"] == 0:
+            if i.get("id") in [0, None]:
                 i.pop("id")
+        # logging.info(values)
         async with self.database.transaction():
             await self.database.execute_many(query=sql, values=values)
 
@@ -383,7 +387,9 @@ class QuerySet(QuerySetMixin):
         return await self.database.fetch_val(query)
 
     async def create(self, **kwargs):
-        instance = self.klass(**kwargs)
+        # a check to see if any foreign key exists in the kwargs
+        new_kwargs = await self.klass.transform_kwargs(**kwargs)
+        instance = self.klass(**new_kwargs)
         await instance.save(using=self._using)
         return instance
 
