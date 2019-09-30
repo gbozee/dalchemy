@@ -194,15 +194,16 @@ class QuerySet(QuerySetMixin):
     def table(self):
         return self.klass.build_table(self.metadata)
 
-    async def bulk_create_or_insert(self, records, is_model=True):
+    async def bulk_create_or_insert(self, records, is_model=True, force_create=False):
         assert len(records) > 0
         sql = self.table.insert()
         if is_model:
             values = [x.db_dict() for x in records]
         else:
             values = [self.klass.build_db_dict(x) for x in records]
-        if values[0].get("id"):
-            sql = self.table.update()
+        if not force_create:
+            if values[0].get("id"):
+                sql = self.table.update()
         for i in values:
             if i.get("id") in [0, None]:
                 i.pop("id")

@@ -123,6 +123,28 @@ async def test_bulk_json_field_insert():
 
 
 @pytest.mark.run_loop
+async def test_bulk_json_field_insert_with_custom_id():
+    user = models.User(full_name="Abiola", email="j@o.com")
+    async with user.database:
+        await models.User.objects.delete()
+        await models.Profile.objects.delete()
+        await user.save()
+        await models.Profile.objects.bulk_create_or_insert(
+            [
+                dict(id=3, user_id=user.id, addresses={"name": "Eleja 2"}),
+                dict(id=2, user_id=user.id, addresses={"name": "Sunday 2"}),
+                dict(id=1, user_id=user.id, addresses={"name": "Sunday"}),
+            ],
+            is_model=False,
+            force_create=True,
+        )
+        profile = await models.Profile.objects.get(id=3)
+        assert profile.addresses == {"name": "Eleja 2"}
+        assert profile.user == user
+        assert profile.id == 3
+
+
+@pytest.mark.run_loop
 async def test_json_field_query():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
