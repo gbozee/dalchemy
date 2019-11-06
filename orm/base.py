@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import typing
+import enum
 from asyncio.tasks import ensure_future
 from dataclasses import dataclass
 
@@ -11,7 +13,7 @@ from pydantic import BaseModel, EmailStr, SecretStr
 from pydantic.main import MetaModel
 
 from . import fields, queryset
-from .queryset import QuerySet, CacheQuerySet
+from .queryset import CacheQuerySet, QuerySet
 from .utils import get_field
 
 
@@ -29,6 +31,8 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         column = sqlalchemy.Integer
     elif field_type == float:
         column = sqlalchemy.Float
+    elif hasattr(field_type, "mro") and enum.Enum in field_type.mro():
+        column = sqlalchemy.Enum(field_type)
 
     elif field_type in [str, EmailStr, SecretStr]:
         length = kwargs.pop("length", None)
@@ -37,6 +41,10 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
             column = sqlalchemy.String(length)
     elif field_type == bool:
         column = sqlalchemy.Boolean
+    elif field_type == datetime.datetime:
+        column = sqlalchemy.DateTime
+    elif field_type == datetime.date:
+        column = sqlalchemy.Date
     elif fields.is_json_field(field_type):
         jsonb = kwargs.pop("jsonb", None)
         column = sqlalchemy.JSON
@@ -330,4 +338,3 @@ class CacheBase(BaseModel, metaclass=CacheMetaClass):
 
     def items(self):
         return self.dict().items()
-

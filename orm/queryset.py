@@ -387,6 +387,14 @@ class QuerySet(QuerySetMixin):
         self.queryset = None  # clear for new calls
         return await self.database.fetch_val(query)
 
+    async def exists(self):
+        # query = (
+        #     .select()
+        #     .select_from(self.get_queryset().alias("ss"))
+        # )
+        count = await self.count()
+        return count > 0
+
     async def create(self, **kwargs):
         # a check to see if any foreign key exists in the kwargs
         new_kwargs = await self.klass.transform_kwargs(**kwargs)

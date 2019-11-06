@@ -38,6 +38,7 @@ async def test_model_create():
         record = await models.User.objects.create(full_name="John", email="j2@o.com")
         assert record.full_name == "John"
         assert await models.User.objects.count() == 2
+        assert await models.User.objects.filter(full_name='John').exists()
         await models.User.objects.delete()
         assert await models.User.objects.count() == 0
 
@@ -191,6 +192,8 @@ async def test_json_field_query():
 async def test_different_db_usage(replica_database):
     db = models.User.database
     async with db:  # using default database
+        await models.User.objects.delete()
+        await models.Profile.objects.delete()
         user = await models.User.objects.create(full_name="Abiola", email="j@o.com")
         assert await models.User.objects.count() == 1
 
