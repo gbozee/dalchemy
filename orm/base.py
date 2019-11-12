@@ -250,6 +250,7 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             tasks.append(cls.objects.remove_cache(obj, connection=connection))
 
         result = await asyncio.gather(*tasks)
+
         return result[0]
 
     async def save(self, using="default", connection=None):
@@ -263,7 +264,8 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             using=using,
             connection=connection,
         )
-        self.id = result
+        if result:
+            self.id = result
         for key, value in with_default_values.items():
             setattr(self, key, value)
         # return task
