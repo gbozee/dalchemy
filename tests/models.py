@@ -1,6 +1,10 @@
-from orm import Base, fields, CacheBase
-from pydantic import EmailStr, SecretStr, validator
 import typing
+from datetime import datetime
+
+import sqlalchemy
+from pydantic import EmailStr, SecretStr, validator
+
+from orm import Base, CacheBase, fields
 
 
 class User(Base):
@@ -8,6 +12,8 @@ class User(Base):
     email: EmailStr
     password: SecretStr = ""
     is_active: bool = True
+    created: datetime = None
+    modified: datetime = None
 
     class Config:
         table_name = "users"
@@ -17,6 +23,8 @@ class User(Base):
             "full_name": {"index": True},
             "email": {"unique": True},
             "is_active": {"default": True},
+            "created": {"default": datetime.now},
+            "modified": {"onupdate": datetime.now},
         }
 
 

@@ -204,7 +204,30 @@ class Base(BaseModel, metaclass=ModelMetaClass):
                     clean_values[key] = value.get_secret_value()
                 else:
                     clean_values[key] = value
+
         return clean_values
+
+    @classmethod
+    def update_passed_values(cls, clean_values):
+        table = cls.table
+
+        def get_default_values(o, passed_value):
+            default = cls.Config.table_config[o].get("default")
+            onupdate = cls.Config.table_config[o].get("onupdate")
+            if onupdate:
+                return onupdate()
+            if callable(default):
+                return passed_value or default()
+            if passed_value == False:
+                return passed_value
+            return passed_value or default
+
+        default_values = {
+            key: get_default_values(key, clean_values.get(key))
+            for key, value in cls.Config.table_config.items()
+            if any([value.get("default"), value.get("onupdate")])
+        }
+        return default_values
 
     @classmethod
     async def save_model(cls, clean_values, _id=0, using="default", connection=None):
@@ -231,10 +254,18 @@ class Base(BaseModel, metaclass=ModelMetaClass):
 
     async def save(self, using="default", connection=None):
         clean_values = self.build_db_save_params()
+        with_default_values = self.__class__.update_passed_values(clean_values)
+
         result = await self.__class__.save_model(
-            clean_values, _id=self.id, using=using, connection=connection
+            {**clean_values, **with_default_values},
+            # clean_values,
+            _id=self.id,
+            using=using,
+            connection=connection,
         )
         self.id = result
+        for key, value in with_default_values.items():
+            setattr(self, key, value)
         # return task
 
     async def load(self):

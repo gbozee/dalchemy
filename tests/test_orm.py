@@ -38,9 +38,20 @@ async def test_model_create():
         record = await models.User.objects.create(full_name="John", email="j2@o.com")
         assert record.full_name == "John"
         assert await models.User.objects.count() == 2
-        assert await models.User.objects.filter(full_name='John').exists()
+        assert await models.User.objects.filter(full_name="John").exists()
         await models.User.objects.delete()
         assert await models.User.objects.count() == 0
+
+
+@pytest.mark.run_loop
+async def test_date_create_or_update():
+    async with models.User.database:
+        user = await models.User.objects.create(full_name="Abiola", email="j@o.com")
+        print(user.created)
+        print(user.modified)
+        await user.save()
+        print(user.created)
+        print(user.modified)
 
 
 @pytest.mark.run_loop
