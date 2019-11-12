@@ -398,6 +398,8 @@ class QuerySet(QuerySetMixin):
     async def create(self, **kwargs):
         # a check to see if any foreign key exists in the kwargs
         new_kwargs = await self.klass.transform_kwargs(**kwargs)
+        missing_kwargs = self.klass.update_passed_values(new_kwargs)
+        new_kwargs = {**new_kwargs, **missing_kwargs}
         instance = self.klass(**new_kwargs)
         await instance.save(using=self._using)
         return instance

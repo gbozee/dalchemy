@@ -12,8 +12,8 @@ class User(Base):
     email: EmailStr
     password: SecretStr = ""
     is_active: bool = True
-    created: datetime = None
-    modified: datetime = None
+    created: datetime
+    modified: datetime
 
     class Config:
         table_name = "users"
