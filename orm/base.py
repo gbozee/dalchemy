@@ -10,7 +10,7 @@ import pydantic
 import sqlalchemy
 from cached_property import cached_property
 from pydantic import BaseModel, EmailStr, SecretStr
-from pydantic.main import MetaModel
+from pydantic.main import ModelMetaclass as MetaModel
 
 from . import fields, queryset
 from .queryset import CacheQuerySet, QuerySet
@@ -50,6 +50,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         column = sqlalchemy.JSON
         if jsonb:
             column = sqlalchemy.dialects.postgresql.JSONB
+            # kwargs.update(astext_type=sqlalchemy.String)
     elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias"]:
         # is a foreign key
         field_value = get_field(field_type)
@@ -246,6 +247,9 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             sql = sql.where(table.c.id == _id)
         # task = asyncio.create_task()
         tasks = [cls.databases[using].execute(query=sql)]
+        if connection:
+            if not obj:
+                obj = cls(**clean_values)
         if obj:
             tasks.append(cls.objects.remove_cache(obj, connection=connection))
 

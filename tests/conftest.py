@@ -11,7 +11,8 @@ from orm import utils
 
 # DATABASE_URL = "sqlite:///test.db"
 DATABASE_URL = "postgresql://e_bots:e_bots1991@localhost:5434/e_bots"
-REPLICA_DATABASE_URL = "postgresql://e_bots1:password@localhost:5434/e_bots"
+REPLICA_DATABASE_URL = "postgresql://e_bots:e_bots1991@localhost:5433/e_bots"
+# REPLICA_DATABASE_URL = "postgresql://e_bots1:password@localhost:5433/e_bots"
 REDIS_HOST = "redis://localhost:6379"
 
 

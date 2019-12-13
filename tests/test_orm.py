@@ -6,10 +6,18 @@ import models
 from orm.utils import async_adapter
 
 
+async def clean_db():
+    await models.User.objects.delete()
+    await models.Profile.objects.delete()
+    await models.PhoneNumber.objects.delete()
+    await models.Skill.objects.delete()
+
+
 @pytest.mark.run_loop
 async def test_model_create():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
+        await clean_db()
         assert not user.id
         await user.save()
         assert user.id == 1
@@ -46,6 +54,7 @@ async def test_model_create():
 @pytest.mark.run_loop
 async def test_date_create_or_update():
     async with models.User.database:
+        await clean_db()
         user = await models.User.objects.create(full_name="Abiola", email="j@o.com")
         print(user.created)
         print(user.modified)
@@ -58,6 +67,7 @@ async def test_date_create_or_update():
 async def test_foreign_key_relationship_creation_with_id():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
+        await clean_db()
         await user.save()
         user_number = await models.PhoneNumber.objects.create(
             user_id=user.id, number="+2348033223323"
@@ -89,6 +99,7 @@ async def test_foreign_key_relationship_creation_with_id():
 async def test_foreign_key_relationship():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
+        await clean_db()
         await user.save()
         user_number = await models.PhoneNumber.objects.create(
             user=user, number="+2348033223323"
@@ -120,6 +131,7 @@ async def test_foreign_key_relationship():
 async def test_bulk_json_field_insert():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
+        await clean_db()
         await user.save()
         await models.Profile.objects.bulk_create_or_insert(
             [
@@ -138,8 +150,7 @@ async def test_bulk_json_field_insert():
 async def test_bulk_json_field_insert_with_custom_id():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
-        await models.User.objects.delete()
-        await models.Profile.objects.delete()
+        await clean_db()
         await user.save()
         await models.Profile.objects.bulk_create_or_insert(
             [
@@ -160,6 +171,7 @@ async def test_bulk_json_field_insert_with_custom_id():
 async def test_json_field_query():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
+        await clean_db()
         await user.save()
         await models.Profile.objects.bulk_create_or_insert(
             [
@@ -203,6 +215,7 @@ async def test_json_field_query():
 async def test_different_db_usage(replica_database):
     db = models.User.database
     async with db:  # using default database
+        await clean_db()
         await models.User.objects.delete()
         await models.Profile.objects.delete()
         user = await models.User.objects.create(full_name="Abiola", email="j@o.com")

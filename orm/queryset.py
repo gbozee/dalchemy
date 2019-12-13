@@ -5,6 +5,7 @@ import asyncio
 import aioredis
 import databases
 import sqlalchemy
+import datetime
 from cached_property import cached_property
 from pydantic import SecretStr
 from . import utils, exceptions
@@ -43,12 +44,14 @@ JSON_OPERATORS = {
 
 
 def to_redis_dict(dictionary: dict, exclude: typing.List[str] = None):
-    result = {}
+    result: typing.Dict[str, typing.Any] = {}
     for key, value in dictionary.items():
         if type(value) == bool:
             result[key] = int(value)
         elif type(value) in [list, dict]:
             result[key] = json.dumps(value)
+        elif type(value) in [datetime.datetime, datetime.date]:
+            result[key] = value.timestamp()
         elif type(value) == SecretStr:
             result[key] = value.get_secret_value()
         else:
@@ -78,7 +81,7 @@ class QuerySetMixin:
     def dict_to_redis_dict(self, dictionary: dict, exclude: typing.List[str] = None):
         from orm.base import Base
 
-        result = {}
+        result: typing.Dict[str, typing.Any] = {}
         for key, value in dictionary.items():
             if type(value) == bool:
                 result[key] = int(value)
@@ -86,6 +89,8 @@ class QuerySetMixin:
                 result[key] = json.dumps(value)
             elif type(value) == dict:
                 result[key] = json.dumps(to_redis_dict(value))
+            elif type(value) in [datetime.datetime, datetime.date]:
+                result[key] = value.timestamp()
             elif isinstance(value, Base):
                 result[key] = json.dumps(to_redis_dict(value.as_dict()))
             else:
@@ -101,6 +106,8 @@ class QuerySetMixin:
         for key, value in class_fields.items():
             if value.type_ == bool:
                 result[key] = int(getattr(obj, key))
+            elif value.type_ in [datetime.datetime, datetime.date]:
+                result[key] = getattr(obj, key).timestamp()
             else:
                 if exclude:
                     if key not in exclude:
@@ -114,6 +121,7 @@ class QuerySetMixin:
         from orm.base import Base
 
         for key, value in class_fields.items():
+
             if key != "id":
                 if value.type_ == bool:
                     actual_dict[key] = bool(as_dict[key])
@@ -123,6 +131,8 @@ class QuerySetMixin:
                     actual_dict[key] = json.loads(as_dict[key])
                 elif issubclass(value.type_, Base):
                     actual_dict[key] = self.marshal_to_class(value.type_, as_dict[key])
+                elif value.type_ in [datetime.datetime, datetime.date]:
+                    actual_dict[key] = value.type_.fromtimestamp(float(as_dict[key]))
                 else:
                     actual_dict[key] = as_dict[key]
         result = klass(**actual_dict)
@@ -395,11 +405,18 @@ class QuerySet(QuerySetMixin):
         count = await self.count()
         return count > 0
 
-    async def create(self, **kwargs):
-        # a check to see if any foreign key exists in the kwargs
+    async def update_kwargs_for_creation(self, **kwargs):
         new_kwargs = await self.klass.transform_kwargs(**kwargs)
         missing_kwargs = self.klass.update_passed_values(new_kwargs)
         new_kwargs = {**new_kwargs, **missing_kwargs}
+        return new_kwargs
+
+    async def create(self, **kwargs):
+        # a check to see if any foreign key exists in the kwargs
+        new_kwargs = await self.update_kwargs_for_creation(**kwargs)
+        # new_kwargs = await self.klass.transform_kwargs(**kwargs)
+        # missing_kwargs = self.klass.update_passed_values(new_kwargs)
+        # new_kwargs = {**new_kwargs, **missing_kwargs}
         instance = self.klass(**new_kwargs)
         await instance.save(using=self._using)
         return instance
@@ -417,7 +434,9 @@ class QuerySet(QuerySetMixin):
         expr = expr.order_by(key.asc())
         result = await self.database.fetch_one(expr)
         self.queryset = None
-        return await self.as_klass(result)
+        if result:
+            return await self.as_klass(result)
+        return None
 
     async def last(self):
         expr = self.get_queryset()
@@ -425,7 +444,9 @@ class QuerySet(QuerySetMixin):
         expr = expr.order_by(key.desc())
         result = await self.database.fetch_one(expr)
         self.queryset = None
-        return await self.as_klass(result)
+        if result:
+            return await self.as_klass(result)
+        return None
 
     async def delete(self):
         expr = self.get_queryset().alias()
@@ -461,7 +482,8 @@ class QuerySet(QuerySetMixin):
 
     # CACHE Queryset methods
     async def quick_create(self, connection, **kwargs):
-        instance = self.klass(**kwargs)
+        new_kwargs = await self.update_kwargs_for_creation(**kwargs)
+        instance = self.klass(**new_kwargs)
         as_dict = self.obj_to_redis_dict(instance)
         # remove demo_id
         as_dict.pop("id", None)

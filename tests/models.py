@@ -12,8 +12,8 @@ class User(Base):
     email: EmailStr
     password: SecretStr = ""
     is_active: bool = True
-    created: datetime
-    modified: datetime
+    created: datetime = None
+    modified: datetime = None
 
     class Config:
         table_name = "users"
@@ -104,3 +104,8 @@ class ProfileCache(CacheBase):
     async def get_data(cls, key):
         user = await User.objects.filter(email=key).get()
         return dict(email=user.email, user=user)
+
+
+def init_tables(database, replica_database=None):
+    metadata = orm.utils.init_tables(Base, database, replica_database=replica_database)
+    return metadata
