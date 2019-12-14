@@ -27,6 +27,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
     field_name = field.name
     field_type = field.type_
     column = None
+    # import ipdb; ipdb.set_trace()
     if field_type == int:
         column = sqlalchemy.Integer
     elif field_type == float:
@@ -51,7 +52,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         if jsonb:
             column = sqlalchemy.dialects.postgresql.JSONB
             # kwargs.update(astext_type=sqlalchemy.String)
-    elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias"]:
+    elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias","_Union"]:
         # is a foreign key
         field_value = get_field(field_type)
         name = kwargs.pop("name")
