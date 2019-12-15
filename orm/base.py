@@ -4,7 +4,6 @@ import typing
 import enum
 from asyncio.tasks import ensure_future
 from dataclasses import dataclass
-from sqlalchemy_utc import UtcDateTime
 import databases
 import pydantic
 import sqlalchemy
