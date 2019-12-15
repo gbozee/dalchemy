@@ -55,7 +55,7 @@ setup(
         "cached_property",
         "aioredis==1.2.0",
         "asyncpg==0.20.0",
-        "psycopg2-binary==2.8.4",
+        "psycopg2-binary==2.8.4"
     ],
     extras_require={},
     classifiers=[

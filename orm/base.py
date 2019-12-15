@@ -4,7 +4,7 @@ import typing
 import enum
 from asyncio.tasks import ensure_future
 from dataclasses import dataclass
-
+from sqlalchemy_utc import UtcDateTime
 import databases
 import pydantic
 import sqlalchemy
@@ -44,6 +44,9 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         column = sqlalchemy.Boolean
     elif field_type == datetime.datetime:
         column = sqlalchemy.DateTime
+        postgres = kwargs.pop("timestamp", None)
+        # if postgres:
+        #     column = sqlalchemy.dialects.postgresql.TIMESTAMP
     elif field_type == datetime.date:
         column = sqlalchemy.Date
     elif fields.is_json_field(field_type):
@@ -52,7 +55,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         if jsonb:
             column = sqlalchemy.dialects.postgresql.JSONB
             # kwargs.update(astext_type=sqlalchemy.String)
-    elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias","_Union"]:
+    elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias", "_Union"]:
         # is a foreign key
         field_value = get_field(field_type)
         name = kwargs.pop("name")
@@ -217,12 +220,21 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             default = cls.Config.table_config[o].get("default")
             onupdate = cls.Config.table_config[o].get("onupdate")
             if onupdate:
-                return onupdate()
+                value = onupdate()
+                if type(value) == datetime.datetime:
+                    return value.replace(tzinfo=None)
+                return value
             if callable(default):
-                return passed_value or default()
+                value = passed_value or default()
+                if type(value) == datetime.datetime:
+                    return value.replace(tzinfo=None)
+                return value
             if passed_value == False:
                 return passed_value
-            return passed_value or default
+            value = passed_value or default
+            if type(value) == datetime.datetime:
+                return value.replace(tzinfo=None)
+            return value
 
         default_values = {
             key: get_default_values(key, clean_values.get(key))
@@ -247,6 +259,7 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         if _id:
             sql = sql.where(table.c.id == _id)
         # task = asyncio.create_task()
+        # import ipdb; ipdb.set_trace()
         tasks = [cls.databases[using].execute(query=sql)]
         if connection:
             if not obj:

@@ -217,7 +217,7 @@ class QuerySet(QuerySetMixin):
         for i in values:
             if i.get("id") in [0, None]:
                 i.pop("id")
-        logging.info(sql)
+        # logging.info(sql)
         async with self.database.transaction():
             await self.database.execute_many(query=sql, values=values)
 

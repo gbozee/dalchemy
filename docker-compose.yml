@@ -50,6 +50,6 @@ services:
     
     image: redis:alpine
     restart: always
-    volumes:
-    - redis_dev:/var/lib/redis
-    - redis_log:/var/log/redis/  
+    # volumes:
+    # - redis_dev:/var/lib/redis
+    # - redis_log:/var/log/redis/  
