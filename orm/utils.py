@@ -1,6 +1,5 @@
 import asyncio
 import functools
-from sqlalchemy_utc import utcnow
 import sqlalchemy
 
 
