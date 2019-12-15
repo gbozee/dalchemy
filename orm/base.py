@@ -154,9 +154,17 @@ class Base(BaseModel, metaclass=ModelMetaClass):
         return result
 
     @classmethod
+    def with_defaults(cls, kwargs):
+        """Sets default fields in addition to passed fields"""
+        new_kwargs = cls.update_passed_values(kwargs)
+        kwargs.update(new_kwargs)
+        return kwargs
+
+    @classmethod
     def validate_model(cls, **kwargs):
         try:
-            instance = cls(**kwargs)
+            new_kwargs = cls.with_defaults(kwargs)
+            instance = cls(**new_kwargs)
         except pydantic.ValidationError as e:
             result = {}
             for value in e.errors():

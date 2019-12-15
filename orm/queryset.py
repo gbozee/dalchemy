@@ -1,16 +1,19 @@
+import asyncio
+import datetime
+import enum
+import json
+import logging
 import typing
 from dataclasses import dataclass
-import json
-import asyncio
+
 import aioredis
 import databases
 import sqlalchemy
-import datetime
 from cached_property import cached_property
 from pydantic import SecretStr
-from . import utils, exceptions
+
+from . import exceptions, utils
 from .fields import CustomField
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -54,6 +57,8 @@ def to_redis_dict(dictionary: dict, exclude: typing.List[str] = None):
             result[key] = value.timestamp()
         elif type(value) == SecretStr:
             result[key] = value.get_secret_value()
+        elif isinstance(value, enum.Enum):
+            result[key] = value.value
         else:
             if exclude:
                 if key not in exclude:
@@ -91,6 +96,8 @@ class QuerySetMixin:
                 result[key] = json.dumps(to_redis_dict(value))
             elif type(value) in [datetime.datetime, datetime.date]:
                 result[key] = value.timestamp()
+            elif isinstance(value, enum.Enum):
+                result[key] = value.value
             elif isinstance(value, Base):
                 result[key] = json.dumps(to_redis_dict(value.as_dict()))
             else:
@@ -108,6 +115,8 @@ class QuerySetMixin:
                 result[key] = int(getattr(obj, key))
             elif value.type_ in [datetime.datetime, datetime.date]:
                 result[key] = getattr(obj, key).timestamp()
+            elif issubclass(value.type_, enum.Enum):
+                result[key] = getattr(obj, key).value
             else:
                 if exclude:
                     if key not in exclude:
@@ -133,6 +142,8 @@ class QuerySetMixin:
                     actual_dict[key] = self.marshal_to_class(value.type_, as_dict[key])
                 elif value.type_ in [datetime.datetime, datetime.date]:
                     actual_dict[key] = value.type_.fromtimestamp(float(as_dict[key]))
+                elif issubclass(value.type_, enum.Enum):
+                    actual_dict[key] = value.type_(as_dict[key])
                 else:
                     actual_dict[key] = as_dict[key]
         result = klass(**actual_dict)
