@@ -1,9 +1,11 @@
 import asyncio
 import datetime
-import typing
 import enum
+import typing
 from asyncio.tasks import ensure_future
 from dataclasses import dataclass
+
+import asyncpg
 import databases
 import pydantic
 import sqlalchemy
@@ -11,7 +13,7 @@ from cached_property import cached_property
 from pydantic import BaseModel, EmailStr, SecretStr
 from pydantic.main import ModelMetaclass as MetaModel
 
-from . import fields, queryset
+from . import fields, queryset, exceptions
 from .queryset import CacheQuerySet, QuerySet
 from .utils import get_field
 
@@ -281,18 +283,22 @@ class Base(BaseModel, metaclass=ModelMetaClass):
     async def save(self, using="default", connection=None):
         clean_values = self.build_db_save_params()
         with_default_values = self.__class__.update_passed_values(clean_values)
+        try:
+            result = await self.__class__.save_model(
+                {**clean_values, **with_default_values},
+                # clean_values,
+                _id=self.id,
+                using=using,
+                connection=connection,
+            )
+            if result:
+                self.id = result
+            for key, value in with_default_values.items():
+                setattr(self, key, value)
+        except asyncpg.exceptions.InterfaceError as e:
+            await self.databases[using].disconnect()
+            raise
 
-        result = await self.__class__.save_model(
-            {**clean_values, **with_default_values},
-            # clean_values,
-            _id=self.id,
-            using=using,
-            connection=connection,
-        )
-        if result:
-            self.id = result
-        for key, value in with_default_values.items():
-            setattr(self, key, value)
         # return task
 
     async def load(self):
