@@ -21,7 +21,7 @@ services:
     environment:
       DB_USER: e_bots
       DB_PASS: e_bots1991
-      DB_NAME: e_bots,e_bots1
+      DB_NAME: e_bots,e_bots1,e_bots2
       REPLICATION_USER: e_bots1
       REPLICATION_PASS: password
       PG_PASSWORD: password

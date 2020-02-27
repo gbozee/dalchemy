@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import enum
+import logging
 import typing
 from asyncio.tasks import ensure_future
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from cached_property import cached_property
 from pydantic import BaseModel, EmailStr, SecretStr
 from pydantic.main import ModelMetaclass as MetaModel
 
-from . import fields, queryset, exceptions
+from . import exceptions, fields, queryset
 from .queryset import CacheQuerySet, QuerySet
 from .utils import get_field
 
@@ -82,7 +83,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
 
 class ModelMetaClass(MetaModel):
     def __init__(self, name, bases, namespace, **kwargs):
-        # This will never be called because the return type of `__new__` is wrong
+        # This will never be called because the return type of `__new__` is 
         super().__init__(name, bases, namespace, **kwargs)
         self.objects = queryset.QuerySet(self)
 
