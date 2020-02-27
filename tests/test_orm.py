@@ -13,7 +13,7 @@ async def clean_db():
     await models.Skill.objects.delete()
 
 
-@pytest.mark.run_loop
+@pytest.mark.asyncio
 async def test_model_create():
     user = models.User(full_name="Abiola", email="j@o.com")
     async with user.database:
@@ -43,8 +43,11 @@ async def test_model_create():
         result = await models.User.objects.filter(is_active=False).get()
         assert result.full_name == "John Doe"
         assert not result.is_active
-        record = await models.User.objects.create(full_name="John", email="j2@o.com")
+        record = await models.User.objects.create(
+            full_name="John", email="j2@o.com", tags=["John"]
+        )
         assert record.full_name == "John"
+        assert record.tags == ["John"]
         assert await models.User.objects.count() == 2
         assert await models.User.objects.filter(full_name="John").exists()
         await models.User.objects.delete()

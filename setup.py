@@ -57,7 +57,9 @@ setup(
         "asyncpg==0.20.0",
         "psycopg2-binary==2.8.4"
     ],
-    extras_require={},
+    extras_require={
+        "test":["pytest","pytest-asyncio"]
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Web Environment",

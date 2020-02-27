@@ -25,6 +25,13 @@ class Field:
     type: typing.Any
 
 
+def is_list(_type):
+    if hasattr(_type, "__extra__"):
+        return _type.__extra__ == list
+    elif hasattr(_type, "__origin__"):
+        return _type.__origin__ == list
+
+
 def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
     field_name = field.name
     field_type = field.type_
@@ -38,10 +45,15 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         column = sqlalchemy.Enum(field_type)
 
     elif field_type in [str, EmailStr, SecretStr]:
-        length = kwargs.pop("length", None)
-        column = sqlalchemy.String
-        if length:
-            column = sqlalchemy.String(length)
+        is_array = kwargs.pop("array", None)
+        if is_array:
+            column = sqlalchemy.dialects.postgresql.ARRAY(sqlalchemy.String, **kwargs)
+            kwargs = {}
+        else:
+            length = kwargs.pop("length", None)
+            column = sqlalchemy.String
+            if length:
+                column = sqlalchemy.String(length)
     elif field_type == bool:
         column = sqlalchemy.Boolean
     elif field_type == datetime.datetime:
@@ -57,6 +69,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
         if jsonb:
             column = sqlalchemy.dialects.postgresql.JSONB
             # kwargs.update(astext_type=sqlalchemy.String)
+    # elif fi
     elif field_type.__class__.__name__ in ["ModelMetaClass", "_GenericAlias", "_Union"]:
         # is a foreign key
         field_value = get_field(field_type)
@@ -83,7 +96,7 @@ def create_db_column(field: Field, **kwargs) -> sqlalchemy.Column:
 
 class ModelMetaClass(MetaModel):
     def __init__(self, name, bases, namespace, **kwargs):
-        # This will never be called because the return type of `__new__` is 
+        # This will never be called because the return type of `__new__` is
         super().__init__(name, bases, namespace, **kwargs)
         self.objects = queryset.QuerySet(self)
 
@@ -270,6 +283,7 @@ class Base(BaseModel, metaclass=ModelMetaClass):
             sql = sql.where(table.c.id == _id)
         # task = asyncio.create_task()
         # import ipdb; ipdb.set_trace()
+        # import pdb; pdb.set_trace()
         tasks = [cls.databases[using].execute(query=sql)]
         if connection:
             if not obj:

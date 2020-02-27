@@ -14,6 +14,7 @@ class User(Base):
     is_active: bool = True
     created: datetime = None
     modified: datetime = None
+    tags: typing.List[str] = []
 
     class Config:
         table_name = "users"
@@ -25,6 +26,7 @@ class User(Base):
             "is_active": {"default": True},
             "created": {"default": datetime.now},
             "modified": {"onupdate": datetime.now},
+            "tags": {"array": True},
         }
 
 
